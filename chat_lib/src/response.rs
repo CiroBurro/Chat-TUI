@@ -1,10 +1,10 @@
-use anyhow::anyhow;
-use tracing::info;
-
+/// Response module
+// Necesary imports
 use crate::{
     messages::{Message, State},
     request::{Method, Request},
 };
+use anyhow::anyhow;
 use core::panic;
 use std::collections::HashMap;
 use tokio::{
@@ -12,18 +12,29 @@ use tokio::{
     net::TcpStream,
 };
 
+/// Response struct representing an HTTP response
 pub struct Response {
+    /// Status of the response
     status: Status,
+
+    /// Headers og the response
     headers: HashMap<String, String>,
+
+    /// Body of the response
     pub body: String,
 }
 
+/// Status enum enumerates the possible status code of the response (only 200, 404 and 404 for this app)
 pub enum Status {
+    /// Status Ok: 200
     Ok,
+    /// Status Not Found: 404
     NotFound,
+    /// Status Bad Request: 400
     BadRequest,
 }
 
+// ToString implementation for Response struct: format the Response struct in the right way to be sent over the tcp stream
 impl ToString for Response {
     fn to_string(&self) -> String {
         let status_line = self.status.to_string();
@@ -38,6 +49,7 @@ impl ToString for Response {
     }
 }
 
+// ToString implementation for Status Enum: format the status into the correct status line of the response (including http version)
 impl ToString for Status {
     fn to_string(&self) -> String {
         let status_line = match self {
@@ -50,21 +62,30 @@ impl ToString for Status {
     }
 }
 
+/// Get response function generate an appropriate HTTP response based on the request
+///
+/// Args:
+///     - req: request from the client
+///     - state: state of the server with all the messages
 pub async fn get_response(req: Request, state: State) -> Result<Response, anyhow::Error> {
-    //info!(?req, "request");
-
+    // Check the request method and uri in order to return the correct response
     let (status, content_type, body) = match (req.method, req.uri.as_str()) {
         (Method::Get, "/messages") => {
+            // Get method + /messages endpoint means that the client is asking for the messages
             let msgs = state.lock().await;
 
             (
                 Status::Ok,
                 "application/json".to_string(),
-                serde_json::to_string(&*msgs)?,
+                serde_json::to_string(&*msgs)?, // the body of the response will be the messages in json format
             )
         }
         (Method::Post, "/messages") => {
+            // Post method + /messages endpoint means that the client is trying to send a new message
+
+            // Check if the response has a body
             if req.body.is_some() {
+                // Read the message from the body and update the server state
                 let body_content: String = req.body.unwrap();
                 let msg = serde_json::from_str::<Message>(body_content.as_str())?;
                 let mut msgs = state.lock().await;
@@ -75,6 +96,7 @@ pub async fn get_response(req: Request, state: State) -> Result<Response, anyhow
                     r#"{"status":"ok"}"#.to_string(),
                 )
             } else {
+                // If there's no message return a bad request status code
                 (
                     Status::BadRequest,
                     "text/plain".to_string(),
@@ -89,6 +111,7 @@ pub async fn get_response(req: Request, state: State) -> Result<Response, anyhow
         ),
     };
 
+    // Construct the headers
     let length = body.len();
 
     let mut headers = HashMap::new();
@@ -105,12 +128,18 @@ pub async fn get_response(req: Request, state: State) -> Result<Response, anyhow
     Ok(response)
 }
 
+/// Parse response function construct a Response struct from the HTTP response
+///
+/// Args:
+///     - stream: tcp stream of the connection
 pub async fn parse_response(mut stream: &mut TcpStream) -> Result<Response, anyhow::Error> {
     let mut buf_reader = BufReader::new(&mut stream);
 
+    // The buf reader reads the first line of the response
     let mut first_line = String::new();
     let _ = buf_reader.read_line(&mut first_line).await?;
 
+    // The first line is splitted and its parts are used to fill the Response struct's fields
     let mut parts = first_line.split_whitespace();
 
     let _ = parts.next();
@@ -128,6 +157,7 @@ pub async fn parse_response(mut stream: &mut TcpStream) -> Result<Response, anyh
 
     let mut headers = HashMap::new();
 
+    // The buf reader reads a line in loop to read the headers
     loop {
         let mut line = String::new();
         let _ = buf_reader.read_line(&mut line).await?;
@@ -138,6 +168,7 @@ pub async fn parse_response(mut stream: &mut TcpStream) -> Result<Response, anyh
             break;
         }
 
+        // Each header is divided into key and value and then inserted into an HashMap
         let mut parts = line.splitn(2, ":");
         let key = parts.next().unwrap().trim();
         let value = parts.next().unwrap().trim();
@@ -147,12 +178,15 @@ pub async fn parse_response(mut stream: &mut TcpStream) -> Result<Response, anyh
 
     let body;
 
+    // Check if the content length header exists
     if let Some(cl) = headers.get("Content-Length") {
+        // The buf reader reads also the body
         let len = cl.parse()?;
         let mut buf = vec![0; len];
         buf_reader.read_exact(&mut buf).await?;
         body = String::from_utf8_lossy(&buf).into_owned();
     } else {
+        // Returns an error because a response must have a body in this app
         return Err(anyhow!("Missing body"));
     }
 

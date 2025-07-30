@@ -1,3 +1,6 @@
+use chat_lib::{messages::Message, IP_ADDR, PORT};
+/// TUI module to implement a tui with ratatui
+// Needed imports
 use ratatui::{
     crossterm::event::{self, Event, KeyCode, KeyModifiers},
     layout::{Constraint, Direction, Layout},
@@ -6,19 +9,28 @@ use ratatui::{
     DefaultTerminal, Frame,
 };
 use tokio::{io::AsyncWriteExt, net::TcpStream, sync::mpsc::Receiver};
-
 use tui_input::{backend::crossterm::EventHandler, Input};
-
-use chat_lib::{messages::Message, IP_ADDR, PORT};
 
 #[derive(Debug)]
 pub struct App {
+    /// App struct containing its state
+
+    /// Username
     user: String,
+
+    /// User input
     input: Input,
+
+    /// Chat messages
     messages: Vec<Message>,
 }
 
+// Methods for the App struct
 impl App {
+    /// Constructor method
+    ///
+    /// Args:
+    ///     - user: username
     pub fn new(user: String) -> Self {
         Self {
             user,
@@ -27,42 +39,59 @@ impl App {
         }
     }
 
+    /// Run method runs the application in loop until it is stopped
+    ///
+    /// Args:
+    ///     - terminal: the terminal instance
+    ///     - rx: receiver for the messages over the channel between the two tasks
     pub async fn run(
         mut self,
         terminal: &mut DefaultTerminal,
         rx: &mut Receiver<Vec<Message>>,
     ) -> Result<(), anyhow::Error> {
+        // Main loop of the client
         loop {
+            // Draw a frame on the terminal
             terminal.draw(|frame| self.draw(frame))?;
-            let msgs = rx.recv().await;
 
+            // Receives the messages and update the App's state
+            let msgs = rx.recv().await;
             if msgs.is_some() {
                 self.messages = msgs.unwrap();
             }
 
+            // Check if there's an event in an interval of 100ms
             if event::poll(tokio::time::Duration::from_millis(100))? {
                 let event: Event = event::read()?;
 
+                // Handle the event
                 if let Event::Key(key) = event {
                     match key.code {
                         KeyCode::Enter => {
+                            // Connection to the server
                             let socket_addr = format!("{}:{}", IP_ADDR, PORT);
                             let mut stream = TcpStream::connect(socket_addr).await?;
 
+                            // Get the message from the input and construct the POST request
                             let message = self.input.value_and_reset();
                             let body =
                                 format!(r#"{{"user":"{}", "message":"{message}"}}"#, self.user);
                             let request = format!("POST /messages HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{body}", body.len());
+
+                            // Send the POST request to the server
                             stream.write_all(request.as_bytes()).await?;
                         }
                         KeyCode::Char('c') => {
+                            // End the program if event is CTRL-C
                             if key.modifiers.contains(KeyModifiers::CONTROL) {
                                 return Ok(());
                             } else {
+                                // Write 'c' in the input
                                 self.input.handle_event(&event);
                             }
                         }
                         _ => {
+                            // Every other character is written in the input
                             self.input.handle_event(&event);
                         }
                     }
@@ -71,7 +100,12 @@ impl App {
         }
     }
 
+    /// Draw function draws the frame on the terminal
+    ///
+    /// Args:
+    ///     - frame: frame to render
     fn draw(&self, frame: &mut Frame<'_>) {
+        // Layout of the tui with two areas: one for the messages and the other for the input
         let [messages_area, input_area] = Layout::default()
             .direction(Direction::Vertical)
             .margin(1)

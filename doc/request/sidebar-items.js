@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["Method"],"fn":["parse_request"],"struct":["Request"]};
