@@ -1,8 +1,9 @@
 /// Main function for the tui client
 // Necesary imports
 use anyhow::anyhow;
-use chat_lib::{messages::Message, response::parse_response, IP_ADDR, PORT};
+use chat_lib::{args::Args, messages::Message, response::parse_response, IP_ADDR, PORT};
 use std::io::stdin;
+use structopt::StructOpt;
 use tokio::{
     io::{stdout, AsyncWriteExt},
     net::TcpStream,
@@ -36,13 +37,28 @@ async fn login() -> Result<String, anyhow::Error> {
 
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
+    // Cli args
+    let Args { ip, port } = Args::from_args();
+    let ip_addr = if ip.is_some() {
+        ip.unwrap()
+    } else {
+        IP_ADDR.to_string()
+    };
+
+    let port = if port.is_some() {
+        port.unwrap()
+    } else {
+        PORT.to_string()
+    };
+
     let user = login().await?;
     let (tx, mut rx) = mpsc::channel(100); // Tokio channel to send messages from one task to the other
 
-    // Receiver handle task, it connects to the server gets all the messages in realtime
-    let _ = tokio::spawn(async move {
-        let socket_addr = format!("{}:{}", IP_ADDR, PORT); // Default socket address of the server
+    let socket_addr = format!("{}:{}", ip_addr, port); // Socket address of the server
 
+    let socket_addr2 = socket_addr.clone(); // Second socket addr for the second task
+                                            // Receiver handle task, it connects to the server gets all the messages in realtime
+    let _ = tokio::spawn(async move {
         loop {
             // Connection to the server
             let mut stream = TcpStream::connect(socket_addr.clone())
@@ -76,8 +92,9 @@ async fn main() -> Result<(), anyhow::Error> {
         // Initialize the terminal
         let mut terminal = ratatui::init();
 
-        // Main loop of the client
-        let result = App::new(user).run(&mut terminal, &mut rx).await;
+        let result = App::new(user)
+            .run(&mut terminal, &mut rx, &socket_addr2)
+            .await;
 
         // Restore the terminal once the client is closed
         ratatui::restore();

@@ -6,6 +6,7 @@ use response::{get_response, Response};
 use tokio::{io::AsyncWriteExt, net::TcpStream};
 
 // Modules of the library
+pub mod args;
 pub mod messages;
 pub mod request;
 pub mod response;

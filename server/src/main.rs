@@ -1,7 +1,8 @@
 /// Main function for the chat app server
 // Necessary imports
-use chat_lib::{handle_connection, messages::State, IP_ADDR, PORT};
+use chat_lib::{args::Args, handle_connection, messages::State, IP_ADDR, PORT};
 use std::sync::Arc;
+use structopt::StructOpt;
 use tokio::{net::TcpListener, sync::Mutex};
 use tracing::info;
 
@@ -12,8 +13,21 @@ async fn main() -> Result<(), anyhow::Error> {
     // State of the server, containes all the messages
     let state: State = Arc::new(Mutex::new(Vec::new()));
 
-    // Listening for connection at the default socket address
-    let socket_addr = format!("{IP_ADDR}:{PORT}");
+    // Cli args
+    let Args { ip, port } = Args::from_args();
+    let ip_addr = if ip.is_some() {
+        ip.unwrap()
+    } else {
+        IP_ADDR.to_string()
+    };
+
+    let port = if port.is_some() {
+        port.unwrap()
+    } else {
+        PORT.to_string()
+    };
+    // Listening for connection at the default or specified socket address
+    let socket_addr = format!("{ip_addr}:{port}");
     let listener = TcpListener::bind(socket_addr).await?;
     info!("Listening on: {}", listener.local_addr()?);
 

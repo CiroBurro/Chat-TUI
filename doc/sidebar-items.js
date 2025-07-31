@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["handle_connection"],"mod":["messages","request","response"],"static":["IP_ADDR","PORT"]};
+window.SIDEBAR_ITEMS = {"fn":["handle_connection"],"mod":["args","messages","request","response"],"static":["IP_ADDR","PORT"]};

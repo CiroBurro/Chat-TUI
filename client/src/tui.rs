@@ -1,4 +1,4 @@
-use chat_lib::{messages::Message, IP_ADDR, PORT};
+use chat_lib::messages::Message;
 /// TUI module to implement a tui with ratatui
 // Needed imports
 use ratatui::{
@@ -48,6 +48,7 @@ impl App {
         mut self,
         terminal: &mut DefaultTerminal,
         rx: &mut Receiver<Vec<Message>>,
+        socket_addr: &str,
     ) -> Result<(), anyhow::Error> {
         // Main loop of the client
         loop {
@@ -69,7 +70,6 @@ impl App {
                     match key.code {
                         KeyCode::Enter => {
                             // Connection to the server
-                            let socket_addr = format!("{}:{}", IP_ADDR, PORT);
                             let mut stream = TcpStream::connect(socket_addr).await?;
 
                             // Get the message from the input and construct the POST request
